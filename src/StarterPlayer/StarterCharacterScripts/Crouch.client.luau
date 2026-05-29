@@ -1,47 +1,49 @@
---READ ME ! ! ! !
---Made by skibidibopbopbop6/Danny. Hope the script helps as it was made by me and my friend.
---Comments will be left in the code so that it will be simpler to understand. Thanks for downloading!
+local player = game.Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hum = char:WaitForChild("Humanoid")
+local UIS = game:GetService("UserInputService")
+local Debounce = false
+local Crouching = false
+local Idle = hum:WaitForChild("Animator"):LoadAnimation(script:WaitForChild("Idle"))
+local Move = hum:WaitForChild("Animator"):LoadAnimation(script:WaitForChild("Move"))
 
-local UserInputService = game:GetService("UserInputService")
-
-local function onInputBegan(input, gameProcessed)
-	if gameProcessed then return end
-	if input.KeyCode == Enum.KeyCode.C then
-		-- Get the player's character and humanoid
-		local player = game.Players.LocalPlayer
-		local character = player.Character or player.CharacterAdded:Wait()
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-
-		if humanoid then
-			-- Change the humanoid's properties to make the character crouch
-			humanoid.HipHeight = 0.5
-			humanoid.WalkSpeed = 6 -- Slows down the player.
-
-			-- Add more properties and actions as needed for crouching
+UIS.InputBegan:Connect(function(I,S)
+	if not S then
+		if not Debounce then
+			if I.KeyCode == Enum.KeyCode.C then
+				Debounce = true
+				Crouching = not Crouching
+				wait()
+				if Crouching then
+					hum.WalkSpeed /= 2 --CROUCHSPEED, REGULAR WALKSPEED IS 16. THIS DIVIDES IT BY 2
+				else
+					hum.WalkSpeed *= 2--WALKSPEED, REGULAR WALKSPEED IS 16. THIS MULTIPLIES THE CROUCHSPEED BY 2
+				end
+				wait(0.5)
+				Debounce = false
+			end
 		end
 	end
-end
+end)
 
-local function onInputEnded(input, gameProcessed)
-	if gameProcessed then return end
-	if input.KeyCode == Enum.KeyCode.C then
-		-- Get the player's character and humanoid
-		local player = game.Players.LocalPlayer
-		local character = player.Character or player.CharacterAdded:Wait()
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-
-		if humanoid then
-			-- Reset the humanoid's properties to stand up
-			humanoid.HipHeight = 2
-			humanoid.WalkSpeed = 12 -- Changes the speed back to normal (the walkspeed in my game is 12 so you can change it to your game's walkspeed).
-			
-			-- Reset other properties and actions as needed
+while true do --DONT CHANGE THIS
+	wait()
+	if Crouching then
+		if hum.MoveDirection ~= Vector3.new(0,0,0) then
+			print("Moving")
+			Idle:Stop()
+			Move:Play()
+			repeat
+				wait()
+			until
+			hum.MoveDirection == Vector3.new(0,0,0) or not Crouching
+		else
+			print("Idle")
+			Idle:Play()
+			Move:Play()
 		end
+	else
+		Idle:Stop()
+		Move:Stop()
 	end
 end
-
--- Connect the input events
-UserInputService.InputBegan:Connect(onInputBegan)
-UserInputService.InputEnded:Connect(onInputEnded)
-
--- If you want to add some, you can add animations to add some life to your crouching.

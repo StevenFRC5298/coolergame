@@ -267,8 +267,6 @@ workspace.ChildAdded:Connect(function(child)
 				end)
 			end
 		end)
-	else
-		buildPrompt(child)
 	end
 end)
 
