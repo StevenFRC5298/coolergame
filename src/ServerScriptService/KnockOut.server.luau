@@ -145,10 +145,10 @@ local function setupNPC(npc)
 	if not prompt then
 		prompt = Instance.new("ProximityPrompt")
 		prompt.Name = "StealthPrompt"
-		prompt.ActionText = "Knock Out"
-		prompt.ObjectText = npc.Name
+		prompt.ActionText = "Put to sleep"
+		prompt.ObjectText = "NPC"
 		prompt.KeyboardKeyCode = Enum.KeyCode.E
-		prompt.HoldDuration = 0
+		prompt.HoldDuration = 0.5
 		prompt.RequiresLineOfSight = false
 		prompt.MaxActivationDistance = MAX_DISTANCE
 		prompt.Enabled = false
@@ -180,7 +180,6 @@ local function setupNPC(npc)
 
 		-- FREEZE AND HIDE REAL PLAYER
 		playerHumanoid.WalkSpeed = 0
-		playerHumanoid.JumpPower = 0
 		playerHumanoid.AutoRotate = false
 		playerRoot.Anchored = true
 		setCharacterTransparency(character, 1)
@@ -233,8 +232,7 @@ local function setupNPC(npc)
 		-- RESTORE REAL PLAYER
 		if playerRoot and playerHumanoid then
 			playerRoot.Anchored = false
-			playerHumanoid.WalkSpeed = 16
-			playerHumanoid.JumpPower = 50
+			playerHumanoid.WalkSpeed = 12
 			playerHumanoid.AutoRotate = true
 			setCharacterTransparency(character, 0)
 		end
