@@ -10,7 +10,7 @@ local camera = workspace.CurrentCamera
 -- CONFIGURATION
 local CAMERA_HEIGHT = 15     -- How high above the player the camera sits
 local CAMERA_RADIUS = 10     -- How far back from the player the camera pulls
-local ROTATION_SPEED = 1.5   -- Speed multiplier for the camera rotation
+local ROTATION_SPEED = 2.5-- Speed multiplier for the camera rotation
 
 local currentAngle = 0       -- The only angle allowed to change (in radians)
 
