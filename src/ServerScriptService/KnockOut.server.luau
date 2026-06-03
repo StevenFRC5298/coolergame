@@ -1,16 +1,14 @@
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Debris = game:GetService("Debris")
 
-local MAX_DISTANCE = 4 -- Raised slightly to ensure overlap detection passes smoothly
-local STEALTH_ANGLE = 0.4
 local PUSH_FORCE = 15
 local ANIMATION_TIME = 0.8
 
-local remote = ReplicatedStorage:WaitForChild("PlayStealthAnimation")
+local playStealthAnimRemote = ReplicatedStorage:WaitForChild("PlayStealthAnimation")
+local toggleCrouchRemote = ReplicatedStorage:WaitForChild("ToggleCrouchState")
 local rigTemplate = ReplicatedStorage:WaitForChild("StealthRigTemplate")
-local fedoraTemplate = ReplicatedStorage:WaitForChild("Black Fedora") 
+local blackFedora = ReplicatedStorage:WaitForChild("Black Fedora")
 
 local PLAYER_ANIM_ID = "rbxassetid://75622876246022"
 local NPC_ANIM_ID = "rbxassetid://125821338722605"
@@ -23,10 +21,15 @@ npcAnimObj.AnimationId = NPC_ANIM_ID
 
 local systemClones = {}
 
+toggleCrouchRemote.OnServerEvent:Connect(function(player, isCrouching)
+	local character = player.Character
+	if character then
+		character:SetAttribute("ServerCrouchState", isCrouching)
+	end
+end)
+
 local function findTorso(model)
-	return model:FindFirstChild("HumanoidRootPart")
-		or model:FindFirstChild("UpperTorso")
-		or model:FindFirstChild("Torso")
+	return model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso")
 end
 
 local function ragdollCharacter(character)
@@ -82,14 +85,39 @@ local function cloneAppearance(sourceCharacter, targetRig)
 			item:Destroy()
 		end
 	end
+
 	for _, item in ipairs(sourceCharacter:GetChildren()) do
-		if item:IsA("Clothing") or item:IsA("ShirtGraphic") or item:IsA("BodyColors") or item:IsA("Accessory") then
+		if item:IsA("Clothing") or item:IsA("ShirtGraphic") or item:IsA("BodyColors") then
 			pcall(function() item:Clone().Parent = targetRig end)
 		elseif item:IsA("Part") or item:IsA("MeshPart") then
 			local targetPart = targetRig:FindFirstChild(item.Name)
 			if targetPart and targetPart:IsA("BasePart") then
 				targetPart.Color = item.Color
 			end
+		end
+	end
+
+	local targetHead = targetRig:FindFirstChild("Head")
+	if targetHead then
+		local fedoraClone = blackFedora:Clone()
+		local fedoraHandle = fedoraClone:FindFirstChild("Handle")
+		if fedoraHandle then
+			fedoraClone.Parent = targetRig
+			local headAttachment = targetHead:FindFirstChild("HatAttachment")
+			local fedoraAttachment = fedoraHandle:FindFirstChild("HatAttachment")
+
+			local manualWeld = Instance.new("Weld")
+			manualWeld.Name = "FedoraStealthWeld"
+			manualWeld.Part0 = targetHead
+			manualWeld.Part1 = fedoraHandle
+
+			if headAttachment and fedoraAttachment then
+				manualWeld.C0 = headAttachment.CFrame
+				manualWeld.C1 = fedoraAttachment.CFrame
+			else
+				manualWeld.C0 = CFrame.new(0, 0.6, 0) 
+			end
+			manualWeld.Parent = fedoraHandle
 		end
 	end
 end
@@ -108,149 +136,114 @@ local function setCharacterTransparency(character, transparency)
 end
 
 local function setupNPC(npc)
-	if not npc:IsA("Model") or npc == rigTemplate or systemClones[npc] or npc.Name == "StealthClone" or npc.Name:match("_Crouch$") then return end
+	if not npc:IsA("Model") or npc.Name ~= "Noob" then return end
+
 	local humanoid = npc:FindFirstChildOfClass("Humanoid")
-	if not humanoid then return end
 	local torso = findTorso(npc)
-	if not torso then return end
+	if not humanoid or not torso then return end
 
 	local prompt = torso:FindFirstChild("StealthPrompt")
 	if not prompt then
 		prompt = Instance.new("ProximityPrompt")
 		prompt.Name = "StealthPrompt"
-		prompt.ActionText = "Put to sleep"
-		prompt.ObjectText = "NPC"
+		prompt.ActionText = "Knockout"
+		prompt.ObjectText = npc.Name
 		prompt.KeyboardKeyCode = Enum.KeyCode.E
 		prompt.HoldDuration = 0.5
 		prompt.RequiresLineOfSight = false
-		prompt.MaxActivationDistance = MAX_DISTANCE
-		prompt.Enabled = false
+		prompt.MaxActivationDistance = 6.0
+		prompt.Enabled = false 
 		prompt.Parent = torso
 	end
 
 	prompt.Triggered:Connect(function(player)
-		if humanoid.Health <= 0 or npc:GetAttribute("BeingTakenDown") then return end
-
 		local character = player.Character
-		if not character or character:GetAttribute("IsCrouching") ~= true then return end
+		if not character then return end
 
-		npc:SetAttribute("BeingTakenDown", true)
-		local playerHumanoid = character:FindFirstChildOfClass("Humanoid")
-		local playerRoot = findTorso(character)
-		if not playerHumanoid or not playerRoot then return end
+		local isCrouched = character:GetAttribute("ServerCrouchState")
+		if not isCrouched then return end
 
-		prompt.Enabled = false
-		local npcRoot = findTorso(npc)
-		if npcRoot then npcRoot.Anchored = true end
+		if humanoid.Health > 0 and not npc:GetAttribute("BeingTakenDown") then
+			npc:SetAttribute("BeingTakenDown", true)
+			prompt.Enabled = false
 
-		local behindPosition = torso.Position - torso.CFrame.LookVector * 2
-		local targetCFrame = CFrame.new(behindPosition, torso.Position)
-		character:PivotTo(targetCFrame)
+			local playerHumanoid = character:FindFirstChildOfClass("Humanoid")
+			local playerRoot = findTorso(character)
+			if not playerHumanoid or not playerRoot then return end
 
-		playerHumanoid.WalkSpeed = 0
-		playerHumanoid.AutoRotate = false
-		playerRoot.Anchored = true
-		setCharacterTransparency(character, 1)
+			playStealthAnimRemote:FireClient(player, "Start")
 
-		local cloneRig = rigTemplate:Clone()
-		cloneRig.Name = "StealthClone"
-		systemClones[cloneRig] = true
+			local npcRoot = findTorso(npc)
+			if npcRoot then npcRoot.Anchored = true end
 
-		cloneAppearance(character, cloneRig)
-		stripCollisions(cloneRig)
+			local behindPosition = torso.Position - torso.CFrame.LookVector * 2
+			local targetCFrame = CFrame.new(behindPosition, torso.Position)
+			character:PivotTo(targetCFrame)
 
-		local cloneRoot = findTorso(cloneRig)
-		if cloneRoot then cloneRoot.Anchored = true end
-		cloneRig.Parent = workspace
+			playerHumanoid.WalkSpeed = 0
+			playerHumanoid.AutoRotate = false
+			playerRoot.Anchored = true
+			setCharacterTransparency(character, 1)
 
-		if cloneRoot then cloneRoot.CFrame = playerRoot.CFrame else cloneRig:PivotTo(playerRoot.CFrame) end
+			local cloneRig = rigTemplate:Clone()
+			cloneRig.Name = "StealthClone"
+			systemClones[cloneRig] = true
 
-		local cloneHumanoid = cloneRig:FindFirstChildOfClass("Humanoid")
-		local cloneAnimator = cloneHumanoid and (cloneHumanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", cloneHumanoid))
-		local npcAnimator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+			cloneAppearance(character, cloneRig)
+			stripCollisions(cloneRig)
 
-		if cloneAnimator then
-			local playerTrack = cloneAnimator:LoadAnimation(playerAnimObj)
-			playerTrack.Priority = Enum.AnimationPriority.Action
-			playerTrack:Play()
+			local cloneRoot = findTorso(cloneRig)
+			if cloneRoot then cloneRoot.Anchored = true end
+			cloneRig.Parent = workspace
+
+			if cloneRoot then cloneRoot.CFrame = playerRoot.CFrame else cloneRig:PivotTo(playerRoot.CFrame) end
+
+			local cloneHumanoid = cloneRig:FindFirstChildOfClass("Humanoid")
+			local cloneAnimator = cloneHumanoid and (cloneHumanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", cloneHumanoid))
+			local npcAnimator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+
+			if cloneAnimator then
+				local playerTrack = cloneAnimator:LoadAnimation(playerAnimObj)
+				playerTrack.Priority = Enum.AnimationPriority.Action
+				playerTrack:Play()
+			end
+			if npcAnimator then
+				local npcTrack = npcAnimator:LoadAnimation(npcAnimObj)
+				npcTrack.Priority = Enum.AnimationPriority.Action
+				npcTrack:Play()
+			end
+
+			task.wait(ANIMATION_TIME)
+
+			-- 🟢 UPDATED WORKFLOW: Safely routing walkspeeds based on current state attributes
+			if playerRoot and playerHumanoid then
+				playerRoot.Anchored = false
+				playerHumanoid.AutoRotate = true
+				setCharacterTransparency(character, 0)
+
+				-- If you are still holding down crouch mode on the server, drop walkspeed to 6 instead of 12!
+				if character:GetAttribute("ServerCrouchState") == true then
+					playerHumanoid.WalkSpeed = 6
+				else
+					playerHumanoid.WalkSpeed = 16
+				end
+			end
+
+			systemClones[cloneRig] = nil
+			if cloneRig then pcall(function() cloneRig:Destroy() end) end
+			if humanoid and npc then
+				humanoid.Health = 0
+				ragdollCharacter(npc)
+			end
+
+			playStealthAnimRemote:FireClient(player, "End")
+			if prompt then pcall(function() prompt:Destroy() end) end
 		end
-		if npcAnimator then
-			local npcTrack = npcAnimator:LoadAnimation(npcAnimObj)
-			npcTrack.Priority = Enum.AnimationPriority.Action
-			npcTrack:Play()
-		end
-
-		remote:FireClient(player)
-		task.wait(ANIMATION_TIME)
-
-		if playerRoot and playerHumanoid then
-			playerRoot.Anchored = false
-			playerHumanoid.WalkSpeed = 12
-			playerHumanoid.AutoRotate = true
-			setCharacterTransparency(character, 0)
-		end
-
-		systemClones[cloneRig] = nil
-		if cloneRig then pcall(function() child:Destroy() end) end
-		if humanoid and npc then
-			humanoid.Health = 0
-			ragdollCharacter(npc)
-		end
-		if prompt then pcall(function() prompt:Destroy() end) end
 	end)
 end
 
 workspace.ChildAdded:Connect(function(child)
-	if child:IsA("Model") and (child.Name == "StealthClone" or systemClones[child]) then
-		task.delay(ANIMATION_TIME + 0.05, function()
-			if child then pcall(function() child:Destroy() end) end
-		end)
-	end
+	setupNPC(child)
 end)
 
 for _, child in ipairs(workspace:GetChildren()) do setupNPC(child) end
-
-RunService.Heartbeat:Connect(function()
-	for _, player in ipairs(Players:GetPlayers()) do
-		local character = player.Character
-		if not character then continue end
-		local playerRoot = findTorso(character)
-		if not playerRoot then continue end
-
-		local isPlayerCrouched = character:GetAttribute("IsCrouching")
-
-		for _, npc in ipairs(workspace:GetChildren()) do
-			if npc == character or systemClones[npc] or npc.Name == "StealthClone" or npc.Name:match("_Crouch$") then continue end
-
-			local humanoid = npc:FindFirstChildOfClass("Humanoid")
-			local torso = findTorso(npc)
-
-			if humanoid and torso and humanoid.Health > 0 and not npc:GetAttribute("BeingTakenDown") then
-				local prompt = torso:FindFirstChild("StealthPrompt")
-				if prompt and prompt:IsA("ProximityPrompt") then
-
-					if not isPlayerCrouched then
-						prompt.Enabled = false
-						continue
-					end
-
-					local distance = (playerRoot.Position - torso.Position).Magnitude
-
-					if distance <= MAX_DISTANCE then
-						local npcLook = torso.CFrame.LookVector
-						local directionToPlayer = (playerRoot.Position - torso.Position).Unit
-						local dot = npcLook:Dot(directionToPlayer)
-
-						if dot < -STEALTH_ANGLE then
-							prompt.Enabled = true
-						else
-							prompt.Enabled = false
-						end
-					else
-						prompt.Enabled = false
-					end
-				end
-			end
-		end
-	end
-end)
